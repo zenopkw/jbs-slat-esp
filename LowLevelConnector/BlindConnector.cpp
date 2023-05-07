@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "BlindConnector.h"
 
-BlindConnector::BlindConnector(int writePin, int blindPin, int luxPin) {
+BlindConnector::BlindConnector(uint8_t writePin, uint8_t blindPin, uint8_t luxPin) {
   pinMode(writePin, OUTPUT);
   pinMode(blindPin, INPUT);
   pinMode(luxPin, INPUT);
@@ -9,17 +9,17 @@ BlindConnector::BlindConnector(int writePin, int blindPin, int luxPin) {
   _blindPin = blindPin;
   _luxPin = luxPin;
 }
-int BlindConnector::_clipPWM(int val) {
+uint8_t BlindConnector::_clipPWM(uint8_t val) {
   return val < 0 ? 0 : val > 255 ? 255
                                  : val;
 }
-void BlindConnector::writePWM(int val) {
+void BlindConnector::writePWM(uint8_t val) {
   int safeVal = _clipPWM(val);
   analogWrite(_writePin, safeVal);
 }
-int BlindConnector::readBlindAnalog() {
+uint16_t BlindConnector::readBlindAnalog() {
   return analogRead(_blindPin);
 }
-int BlindConnector::readLuxAnalog() {
+uint16_t BlindConnector::readLuxAnalog() {
   return analogRead(_luxPin);
 }
