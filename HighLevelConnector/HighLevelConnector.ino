@@ -11,15 +11,17 @@
 #define CMD_WRITE_BLIND 0x01
 #define CMD_READ_BLIND 0x02
 #define CMD_READ_LUX 0x03
+#define CRC16_POLICY 0xF0
 #define MQTT_SERVER "192.168.1.52"
 #define MQTT_PORT 1883
 // #define MQTT_USERNAME "[USERNAME]"
 // #define MQTT_PASSWORD "[PASSWORD]"
 #define MQTT_NAME "esp8266"
-#define MSG_BUFFER_SIZE 50
+#define MSG_BUFFER_SIZE 100
 #define MQTT_TOPIC_SLAT "jbs/slat"
-#define MQTT_TOPIC_BLIND_SET "jbs/slat/blind/set"
+#define MQTT_TOPIC_READ "jbs/slat/read"
 #define MQTT_TOPIC_FEEDBACK "jbs/slat/feedback"
+#define MQTT_TOPIC_BLIND_SET "jbs/slat/blind/set"
 
 const char *ssid = STASSID;
 const char *password = STAPSK;
@@ -41,6 +43,21 @@ void callback(char *topic, byte *payload, unsigned int length)
     snprintf(mqttMsg, MSG_BUFFER_SIZE, "{\"blind\": \"%ld\", \"illuminance\": \"%ld\"}", 1, 1);
     client.publish(MQTT_TOPIC_FEEDBACK, mqttMsg);
   }
+  else if (strcmp(topic, MQTT_TOPIC_READ) == 0)
+  {
+    payload[length] = '\0';
+    byte command = atoi((char *)payload);
+    if (command == 2)
+    {
+      constructMessage(msg, CMD_READ_BLIND, 0);
+      Serial.write(msg, sizeof(msg));
+    }
+    else if (command == 3)
+    {
+      constructMessage(msg, CMD_READ_LUX, 0);
+      Serial.write(msg, sizeof(msg));
+    }
+  }
 }
 
 void reconnect()
@@ -60,6 +77,7 @@ void reconnect()
       client.publish(MQTT_TOPIC_SLAT, "{\"status\":\"active\"}");
       // ... and resubscribe
       client.subscribe(MQTT_TOPIC_BLIND_SET);
+      client.subscribe(MQTT_TOPIC_READ);
     }
     else
     {
@@ -154,6 +172,70 @@ void loop()
   if (!client.connected())
   {
     reconnect();
+  }
+  if (Serial.available() > 3)
+  {
+    delay(10);
+    crc.reset();
+    uint8_t command = 0x00;
+    uint8_t numBytes = 0x00;
+    uint16_t blind_val = 0x00;
+    uint16_t lux_val = 0x00;
+    while (Serial.available() > 0)
+    {
+      if (command == 0x00)
+      {
+        command = Serial.read();
+        crc.add(command);
+      }
+      else if (numBytes == 0x00)
+      {
+        numBytes = Serial.read();
+        crc.add(numBytes);
+      }
+      else
+      {
+        uint8_t buffer[numBytes];
+        Serial.readBytes(buffer, numBytes);
+        if (command != CRC16_POLICY)
+        {
+          crc.add(buffer, numBytes);
+          if (command == CMD_READ_BLIND)
+          {
+            blind_val = ((uint16_t)buffer[1] << 8) | buffer[0];
+          }
+          else if (command == CMD_READ_LUX)
+          {
+            lux_val = ((uint16_t)buffer[1] << 8) | buffer[0];
+          }
+          command = 0x00;
+          numBytes = 0x00;
+        }
+        else
+        {
+          uint16_t crc_val = ((uint16_t)buffer[1] << 8) | buffer[0];
+          uint16_t calculatedCrc = crc.getCRC();
+          if (calculatedCrc == crc_val)
+          {
+            char mqttMsg[MSG_BUFFER_SIZE];
+            if (blind_val && lux_val)
+            {
+              snprintf(mqttMsg, MSG_BUFFER_SIZE, "{\"blind\": \"%ld\", \"illuminance\": \"%ld\"}", blind_val, lux_val);
+            }
+            else if (blind_val)
+            {
+              snprintf(mqttMsg, MSG_BUFFER_SIZE, "{\"blind\": \"%ld\"}", blind_val);
+            }
+            else if (lux_val)
+            {
+              snprintf(mqttMsg, MSG_BUFFER_SIZE, "{\"illuminance\": \"%ld\"}", lux_val);
+            }
+            client.publish(MQTT_TOPIC_FEEDBACK, mqttMsg);
+          }
+        }
+      }
+    }
+    Serial.flush();
   }
   client.loop();
 }
