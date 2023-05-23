@@ -25,7 +25,7 @@
 
 const char *ssid = STASSID;
 const char *password = STAPSK;
-uint8_t msg[5] = {};
+uint8_t msg[10] = {};
 
 CRC16 crc;
 WiFiClient espClient;
@@ -147,13 +147,16 @@ void wifiSetup()
 void constructMessage(uint8_t *msg, uint8_t command, uint16_t value)
 {
   msg[0] = command;
-  msg[1] = value & 0xFF;
-  msg[2] = (value >> 8) & 0xFF;
+  msg[1] = 0x02;
+  msg[2] = value & 0xFF;
+  msg[3] = (value >> 8) & 0xFF;
+  msg[4] = CRC16_POLICY;
+  msg[5] = 0x02;
   crc.reset();
-  crc.add((uint8_t *)msg, 3);
+  crc.add((uint8_t *)msg, 6);
   uint16_t crc_val = crc.getCRC();
-  msg[3] = crc_val & 0xFF;
-  msg[4] = (crc_val >> 8) & 0xFF;
+  msg[6] = crc_val & 0xFF;
+  msg[7] = (crc_val >> 8) & 0xFF;
 }
 
 void setup()
