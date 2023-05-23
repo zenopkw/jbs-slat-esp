@@ -12,73 +12,84 @@
 CRC16 crc;
 BlindConnector blindConnector(PWM_PIN, A0, A1);
 
-uint8_t msg[10] = {};
-
-void constructMessage(uint8_t *msg, uint8_t command, uint16_t value) {
-  msg[0] = command;
-  msg[1] = 0x02;
-  msg[2] = value & 0xFF;
-  msg[3] = (value >> 8) & 0xFF;
-  msg[4] = CRC16_POLICY;
-  msg[5] = 0x02;
-  crc.reset();
-  crc.add((uint8_t *)msg, 6);
-  uint16_t crc_val = crc.getCRC();
-  msg[6] = crc_val & 0xFF;
-  msg[7] = (crc_val >> 8) & 0xFF;
-}
-
-void setup() {
+void setup()
+{
   Serial.begin(BAUD_RATE);
 }
 
-void loop() {
+void loop()
+{
   crc.reset();
-  if (Serial.available() >= 3) {
-    uint8_t command = Serial.read();
-    crc.add(command);
-    uint16_t crc_val;
-    uint8_t buffer[2];
-    if (command == CMD_WRITE_BLIND) {
-      if (Serial.readBytes(buffer, 2) == 2) {
-        uint8_t pwmValue = buffer[0];
-        crc.add(pwmValue);
-        crc.add(0x00);
-        if (Serial.readBytes(buffer, 2) == 2) {
-          crc_val = ((uint16_t)buffer[1] << 8) | buffer[0];
-          uint16_t calculatedCrc = crc.getCRC();
-          if (calculatedCrc == crc_val) {
-            blindConnector.writePWM((uint8_t)pwmValue);
-          }
+  if (Serial.available() >= 6)
+  {
+    crc.reset();
+    uint8_t command = 0x00;
+    uint8_t numBytes = 0x00;
+    uint8_t i = 0x00;
+    uint8_t _msg[20] = {};
+    while (Serial.available() > 0)
+    {
+      if (command == 0x00)
+      {
+        command = Serial.read();
+        crc.add(command);
+        if (command != CRC16_POLICY && command != CMD_WRITE_BLIND)
+        {
+          _msg[i++] = command;
         }
       }
-    } else if (command == CMD_READ_BLIND) {
-      if (Serial.readBytes(buffer, 2) == 2) {
-        crc.add(buffer, 2);
-        if (Serial.readBytes(buffer, 2) == 2) {
-          crc_val = ((uint16_t)buffer[1] << 8) | buffer[0];
-          uint16_t calculatedCrc = crc.getCRC();
-          if (calculatedCrc == crc_val) {
-            uint16_t blindAnalog = blindConnector.readBlindAnalog();
-            constructMessage(msg, command, blindAnalog);
-            Serial.write(msg, sizeof(msg));
-          }
+      else if (numBytes == 0x00)
+      {
+        numBytes = Serial.read();
+        crc.add(numBytes);
+        if (command != CRC16_POLICY && command != CMD_WRITE_BLIND)
+        {
+          _msg[i++] = numBytes;
         }
       }
-    } else if (command == CMD_READ_LUX) {
-      if (Serial.readBytes(buffer, 2) == 2) {
-        crc.add(buffer, 2);
-        if (Serial.readBytes(buffer, 2) == 2) {
-          crc_val = ((uint16_t)buffer[1] << 8) | buffer[0];
+      else
+      {
+        uint8_t buffer[numBytes];
+        Serial.readBytes(buffer, numBytes);
+        if (command != CRC16_POLICY)
+        {
+          crc.add(buffer, numBytes);
+          if (command == CMD_READ_BLIND)
+          {
+            uint16_t value = blindConnector.readBlindAnalog();
+            _msg[i++] = value & 0xFF;
+            _msg[i++] = (value >> 8) & 0xFF;
+          }
+          else if (command == CMD_READ_LUX)
+          {
+            uint16_t value = blindConnector.readLuxAnalog();
+            _msg[i++] = value & 0xFF;
+            _msg[i++] = (value >> 8) & 0xFF;
+          }
+          command = 0x00;
+          numBytes = 0x00;
+        }
+        else
+        {
+          uint16_t crc_val = ((uint16_t)buffer[1] << 8) | buffer[0];
           uint16_t calculatedCrc = crc.getCRC();
-          if (calculatedCrc == crc_val) {
-            uint16_t luxAnalog = blindConnector.readLuxAnalog();
-            constructMessage(msg, command, luxAnalog);
-            Serial.write(msg, sizeof(msg));
+          if (calculatedCrc == crc_val)
+          {
+            _msg[i++] = CRC16_POLICY;
+            _msg[i++] = 0x02;
+            crc.reset();
+            crc.add((uint8_t *)_msg, i);
+            uint16_t crc_val = crc.getCRC();
+            _msg[i++] = crc_val & 0xFF;
+            _msg[i++] = (crc_val >> 8) & 0xFF;
+            Serial.write(_msg, sizeof(_msg));
           }
         }
       }
     }
+  }
+  while (Serial.available() > 0)
+  {
     Serial.flush();
   }
   delay(DELAY_MS);
