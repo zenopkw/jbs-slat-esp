@@ -88,9 +88,5 @@ void loop()
       }
     }
   }
-  while (Serial.available() > 0)
-  {
-    Serial.flush();
-  }
   delay(DELAY_MS);
 }

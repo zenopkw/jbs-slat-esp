@@ -238,7 +238,6 @@ void loop()
         }
       }
     }
-    Serial.flush();
   }
   client.loop();
 }
