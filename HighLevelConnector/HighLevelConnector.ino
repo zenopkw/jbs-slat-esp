@@ -57,6 +57,26 @@ void callback(char *topic, byte *payload, unsigned int length)
       constructMessage(msg, CMD_READ_LUX, 0);
       Serial.write(msg, sizeof(msg));
     }
+    else if (command == 23)
+    {
+      uint8_t _msg[12] = {};
+      _msg[0] = CMD_READ_BLIND;
+      _msg[1] = 0x02;
+      _msg[2] = 0x00;
+      _msg[3] = 0x00;
+      _msg[4] = CMD_READ_LUX;
+      _msg[5] = 0x02;
+      _msg[6] = 0x00;
+      _msg[7] = 0x00;
+      _msg[8] = CRC16_POLICY;
+      _msg[9] = 0x02;
+      crc.reset();
+      crc.add((uint8_t *)_msg, 10);
+      uint16_t crc_val = crc.getCRC();
+      _msg[10] = crc_val & 0xFF;
+      _msg[11] = (crc_val >> 8) & 0xFF;
+      Serial.write(_msg, sizeof(_msg));
+    }
   }
 }
 
