@@ -39,6 +39,7 @@ void callback(char *topic, byte *payload, unsigned int length)
     byte pwmVal = atoi((char *)payload);
     constructMessage(msg, CMD_WRITE_BLIND, pwmVal);
     Serial.write(msg, sizeof(msg));
+    delay(100);
     readAllValues();
   }
   else if (strcmp(topic, MQTT_TOPIC_READ) == 0)
@@ -67,12 +68,12 @@ void readAllValues()
   uint8_t _msg[12] = {};
   _msg[0] = CMD_READ_BLIND;
   _msg[1] = 0x02;
-  _msg[2] = 0x00;
-  _msg[3] = 0x00;
+  _msg[2] = 0xFF;
+  _msg[3] = 0xFF;
   _msg[4] = CMD_READ_LUX;
   _msg[5] = 0x02;
-  _msg[6] = 0x00;
-  _msg[7] = 0x00;
+  _msg[6] = 0xFF;
+  _msg[7] = 0xFF;
   _msg[8] = CRC16_POLICY;
   _msg[9] = 0x02;
   crc.reset();
@@ -187,7 +188,7 @@ void setup()
   Serial.begin(115200);
   Serial.println("Booting");
   wifiSetup();
-
+  delay(500);
   client.setServer(MQTT_SERVER, MQTT_PORT);
   client.setCallback(callback);
 }
@@ -201,7 +202,6 @@ void loop()
   }
   if (Serial.available() > 3)
   {
-    delay(10);
     crc.reset();
     uint8_t command = 0x00;
     uint8_t numBytes = 0x00;
@@ -247,20 +247,27 @@ void loop()
             if (blind_val && lux_val)
             {
               snprintf(mqttMsg, MSG_BUFFER_SIZE, "{\"blind\": \"%ld\", \"illuminance\": \"%ld\"}", blind_val, lux_val);
+              client.publish(MQTT_TOPIC_FEEDBACK, mqttMsg);
             }
             else if (blind_val)
             {
               snprintf(mqttMsg, MSG_BUFFER_SIZE, "{\"blind\": \"%ld\"}", blind_val);
+              client.publish(MQTT_TOPIC_FEEDBACK, mqttMsg);
             }
             else if (lux_val)
             {
               snprintf(mqttMsg, MSG_BUFFER_SIZE, "{\"illuminance\": \"%ld\"}", lux_val);
+              client.publish(MQTT_TOPIC_FEEDBACK, mqttMsg);
             }
-            client.publish(MQTT_TOPIC_FEEDBACK, mqttMsg);
+            else
+            {
+              client.publish(MQTT_TOPIC_FEEDBACK, "{\"status\": \"read failed\"}");
+            }
           }
         }
       }
     }
   }
   client.loop();
+  delay(10);
 }
