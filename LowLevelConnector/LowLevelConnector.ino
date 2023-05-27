@@ -27,13 +27,14 @@ void loop()
     uint8_t numBytes = 0x00;
     uint8_t i = 0x00;
     uint8_t _msg[20] = {};
+    uint16_t write_val = 0x00;
     while (Serial.available() > 0)
     {
       if (command == 0x00)
       {
         command = Serial.read();
         crc.add(command);
-        if (command != CRC16_POLICY && command != CMD_WRITE_BLIND)
+        if (command != CRC16_POLICY)
         {
           _msg[i++] = command;
         }
@@ -42,7 +43,7 @@ void loop()
       {
         numBytes = Serial.read();
         crc.add(numBytes);
-        if (command != CRC16_POLICY && command != CMD_WRITE_BLIND)
+        if (command != CRC16_POLICY)
         {
           _msg[i++] = numBytes;
         }
@@ -66,6 +67,10 @@ void loop()
             _msg[i++] = value & 0xFF;
             _msg[i++] = (value >> 8) & 0xFF;
           }
+          else if (command == CMD_WRITE_BLIND)
+          {
+            write_val = ((uint16_t)buffer[1] << 8) | buffer[0];
+          }
           command = 0x00;
           numBytes = 0x00;
         }
@@ -75,14 +80,22 @@ void loop()
           uint16_t calculatedCrc = crc.getCRC();
           if (calculatedCrc == crc_val)
           {
-            _msg[i++] = CRC16_POLICY;
-            _msg[i++] = 0x02;
-            crc.reset();
-            crc.add((uint8_t *)_msg, i);
-            uint16_t crc_val = crc.getCRC();
-            _msg[i++] = crc_val & 0xFF;
-            _msg[i++] = (crc_val >> 8) & 0xFF;
-            Serial.write(_msg, sizeof(_msg));
+            if (write_val)
+            {
+              blindConnector.writePWM(write_val);
+              write_val = 0x00;
+            }
+            else
+            {
+              _msg[i++] = CRC16_POLICY;
+              _msg[i++] = 0x02;
+              crc.reset();
+              crc.add((uint8_t *)_msg, i);
+              uint16_t crc_val = crc.getCRC();
+              _msg[i++] = crc_val & 0xFF;
+              _msg[i++] = (crc_val >> 8) & 0xFF;
+              Serial.write(_msg, sizeof(_msg));
+            }
           }
         }
       }
